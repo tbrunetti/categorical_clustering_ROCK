@@ -1,6 +1,6 @@
 # categorical_clustering_ROCK
 
-All the files and scripts in this directory are made to cluster categorical data using the unsupervised learning ROCK algorithm (RObust Clustering using linKs) from Guha, Rastogi, Shim, 1999.
+All the files and scripts in this directory are made to cluster categorical data using the unsupervised learning ROCK algorithm (RObust Clustering using linKs) from Guha, Rastogi, Shim, 1999 (http://dl.acm.org/citation.cfm?id=847264).
 
 #### Dependencies
 ------------------
