@@ -17,7 +17,7 @@ def initiate_matrix(inputMatrixData, colName, rowName):
 	patientProfile=np.array(patientProfile)
 
 	# nxn matrix representing patient profile similarity comparisons in pair-wise manner
-	jaccardMatrix = np.zeros((len(patientProfile), len(patientProfile)))
+	similarityMatrix = np.zeros((len(patientProfile), len(patientProfile)))
 	
 	# nxn matrix representing patient profiles that are linked together based on JC similarity threshold
 	neighborMatrix = np.zeros((len(patientProfile), len(patientProfile)))
@@ -45,29 +45,54 @@ def initiate_matrix(inputMatrixData, colName, rowName):
 	
 	patNames, attributeNames = getNames(inputMatrixData, colName, rowName)
 	labeled_patProfile = pd.DataFrame(patientProfile, index=patNames, columns=attributeNames)
-	return labeled_patProfile, patientProfile, jaccardMatrix, neighborMatrix, patNames, attributeNames
+	return labeled_patProfile, patientProfile, similarityMatrix, neighborMatrix, patNames, attributeNames
 
 
-def calculate_similarity(patientProfile, metric):
+def calculate_similarity(patientProfile, similarityMatrix, metric):
+	
+	def calc_SMC(patientProfile, similarityMatrix):
+		# calculate the simple matching coefficient
+		# equal weights are placed on a matching 0's as matching 1's
+		# higher SMC, closer to 1, means more similar
+		for i in range(0, len(patientProfile)):
+			for j in range(0, len(patientProfile)):
+				first = patientProfile[i]
+				second = patientProfile[j]
+				total_matches = sum([int(1) for a,b in zip(first, second) if a==b])
+				percent_match = float(float(total_matches)/len(patientProfile[0]))
+				similarityMatrix[i, j] = percent_match
+		
+		return similarityMatrix
 
-	# calculate the Jaccard Coeffient for between each pair of patients and normalizes to value between 0 and 1
-	# high JC, closer to 1, means more similar
-	for i in range(0, len(patientProfile)):
-		for j in range(0, len(patientProfile)):
-			jaccardMatrix[i][j] = jaccard_similarity_score(patientProfile[i], patientProfile[j], normalize=True)
+	def calc_JC(patientProfile, similarityMatrix):
+		# calculate the Jaccard Coeffient for between each pair of patients and normalizes to value between 0 and 1
+		# high JC, closer to 1, means more similar
+		for i in range(0, len(patientProfile)):
+			for j in range(0, len(patientProfile)):
+				similarityMatrix[i, j] = jaccard_similarity_score(patientProfile[i], patientProfile[j], normalize=True)
+		
+		return similarityMatrix
 
-	return jaccardMatrix
+	if metric == 'JC':
+		calc_JC(patientProfile, similarityMatrix);
+		return similarityMatrix
+	elif metric =='SMC':
+		calc_SMC(patientProfile, similarityMatrix);
+		return similarityMatrix
+	else:
+		print "error:  metric specified does not exist"
+	
 
-
-def calculate_neighbors(neighborMatrix, jaccardMatrix, patNames, threshold):
+def calculate_neighbors(neighborMatrix, similarityMatrix, patNames, threshold):
 	# if greater or equal than threshold, recorded as linked (1) or if less than unlinked (0)
-	for i in range(0, len(jaccardMatrix)):
-		for j in range(0, len(jaccardMatrix)):
-			if jaccardMatrix[i][j] >= threshold:
+	for i in range(0, len(similarityMatrix)):
+		for j in range(0, len(similarityMatrix)):
+			if similarityMatrix[i][j] >= threshold:
 				neighborMatrix[i][j] = 1
 
 	numLinks = np.dot(neighborMatrix, neighborMatrix)
 	labeled_numLinks = pd.DataFrame(numLinks, index=patNames, columns=patNames)
+	print labeled_numLinks
 	return labeled_numLinks
 
 
@@ -160,9 +185,9 @@ if __name__=='__main__':
 	args=parser.parse_args()
 
 	# initiate_matrix, calculate_similarity, and calculate_neighbors only need to be called once
-	labeled_patProfile, patientProfile, jaccardMatrix, neighborMatrix, patNames, attributeNames = initiate_matrix(inputMatrixData=args.matrixFile, colName=args.colNames, rowName=args.rowNames)
-	jaccardMatrix = calculate_similarity(patientProfile, metric=args.metric)
-	labeled_numLinks = calculate_neighbors(neighborMatrix, jaccardMatrix, patNames, threshold=args.minThresh)
+	labeled_patProfile, patientProfile, similarityMatrix, neighborMatrix, patNames, attributeNames = initiate_matrix(inputMatrixData=args.matrixFile, colName=args.colNames, rowName=args.rowNames)
+	similarityMatrix = calculate_similarity(patientProfile, similarityMatrix, metric=args.metric)
+	labeled_numLinks = calculate_neighbors(neighborMatrix, similarityMatrix, patNames, threshold=args.minThresh)
 	
 	while len(labeled_numLinks) > args.kclusters:
 		pairwise_fitness = fitness_measure(labeled_numLinks, threshold=args.minThresh)
