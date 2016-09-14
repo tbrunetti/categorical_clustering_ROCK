@@ -5,6 +5,7 @@ from sklearn.metrics import jaccard_similarity_score
 from itertools import combinations
 import pandas as pd
 import os
+import math
 
 def initiate_matrix(inputMatrixData, colName, rowName):
 	
@@ -92,7 +93,7 @@ def calculate_neighbors(neighborMatrix, similarityMatrix, patNames, threshold):
 
 	numLinks = np.dot(neighborMatrix, neighborMatrix)
 	labeled_numLinks = pd.DataFrame(numLinks, index=patNames, columns=patNames)
-	print labeled_numLinks
+
 	return labeled_numLinks
 
 
@@ -143,10 +144,61 @@ def cluster_summaries_binary_attributes(labeled_numLinks, labeled_patProfile, ou
 	parametersFile = open('parameters_'+str(dataName)+'.txt', 'w')
 	parametersFile.write('clusters: '+str(numClusters)+'\n'+'similarity_Metric: '+str(metric)+'\n'+'min_threshold_for_similarity:'+str(thresh))
 	outFile = open('final_output_'+str(dataName)+'.txt', 'w')
+	row_names=list(labeled_patProfile.index.values)
+	attribute_names = list(labeled_patProfile.columns.values)
+	column_entropy = []
 	
+	# calculates entropy of the entire unclustered data set
+	for v in range(0, len(attribute_names)):
+		num_ones = sum([int(labeled_patProfile[attribute_names[v]][row_names[x]]) for x in range(0, len(row_names))])
+		# len(row_names) gets total number of patients
+		num_zeros = len(row_names) - num_ones
+		if num_ones == 1 or num_ones == 0:
+			column_entropy.append(0)
+		else:
+			partial_entropy_ones = float(num_ones)/len(row_names)*(math.log(float(num_ones)/len(row_names), 2))
+			partial_entropy_zeros = float(num_zeros)/len(row_names)*(math.log(float(num_zeros)/len(row_names), 2))
+			column_entropy.append(-1*(partial_entropy_ones+partial_entropy_zeros))
+
+	entropy_of_dataset = sum(column_entropy)
+	outFile.write('Entropy_of_dataset_unclustered: '+str(entropy_of_dataset)+'\n'+'\n')
+
+
+	# this function is called each time a new cluster in made, i.e. if 2 clusters, this is called two separate independent times
+	def calc_within_cluster_entropy(patIDs, attributes, summary, key, attribute_names, row_names):
+		entropy_of_each_attribute = []
+		# entropy of 0 means all patients share that attribute
+		num_samples_in_cluster = len(patIDs)
+		numTot_Attributes = len(summary)
+
+		for i in range(0, numTot_Attributes):
+			# calcs the number of samples that have an attribute versus the number that do not
+			has_attribute = (float(summary[i])/num_samples_in_cluster)
+			not_have_attribute = 1 - float(has_attribute)
+			
+			# log base 2 of 1 is zero and log base 2 of 0 is undefined so entropy is 0 in both cases
+			if has_attribute == 1.0 or has_attribute == 0.0:
+				entropy_of_each_attribute.append(0)
+			
+			# assuming entropy is not 0, this calculates entropy
+			else:
+				sumOfAtts = sum([has_attribute*(math.log(has_attribute, 2)), not_have_attribute*(math.log(not_have_attribute, 2))])
+				entropy = -1*sumOfAtts
+				entropy_of_each_attribute.append(entropy)
+
+		# writes entropy for every attribute in each cluster to file
+		outFile.write('Entropy of each attribute for clusterID_'+str(key)+'\n')
+		outFile.write('\t'.join(attribute_names)+'\n')
+		outFile.write('\t'.join([str(entropy_of_each_attribute[x]) for x in range(0, len(entropy_of_each_attribute))])+'\n')
+
+		outFile.write('Total_Entropy_of_cluster_'+str(key)+': '+str(sum(entropy_of_each_attribute))+'\n')
+		outFile.write('Weighted_Entropy_of_cluster_'+str(key)+': '+str((float(num_samples_in_cluster)/len(row_names))*(sum(entropy_of_each_attribute)))+'\n')
+
+
+
+
 	# extract cluster names, and attribute names
 	clusters = labeled_numLinks.columns.values
-	attribute_names = list(labeled_patProfile.columns.values)
 	attribute_names.insert(0, 'patID')
 	cluster_attributes = {}
 
@@ -167,9 +219,14 @@ def cluster_summaries_binary_attributes(labeled_numLinks, labeled_patProfile, ou
 		patIDs, attributes = np.split(tempArray, [1], axis=1)
 		# counts total number of pats with each attribute per cluster
 		summary = list(np.sum(attributes.astype(int), axis=0))
+		
+		calc_within_cluster_entropy(patIDs, attributes, summary, key, attribute_names, row_names)
+		
 		summary.insert(0, 'total_atts_in_cluster_'+str(key))
 		str_summary = [str(summary[x]) for x in range(0, len(summary))]
 		outFile.write('\t'.join(str_summary)+'\n'+'\n')
+
+		
 
 if __name__=='__main__':
 	parser=argparse.ArgumentParser(description='Categorical classification using ROCK (RObust Clustering using linKs)')
