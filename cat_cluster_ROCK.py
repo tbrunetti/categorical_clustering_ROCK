@@ -147,7 +147,9 @@ def cluster_summaries_binary_attributes(labeled_numLinks, labeled_patProfile, ou
 	row_names=list(labeled_patProfile.index.values)
 	attribute_names = list(labeled_patProfile.columns.values)
 	column_entropy = []
-	
+	variance_all_clusters=[]
+	weighted_entropy_all_clusters=[]
+
 	# calculates entropy of the entire unclustered data set
 	for v in range(0, len(attribute_names)):
 		num_ones = sum([int(labeled_patProfile[attribute_names[v]][row_names[x]]) for x in range(0, len(row_names))])
@@ -165,7 +167,7 @@ def cluster_summaries_binary_attributes(labeled_numLinks, labeled_patProfile, ou
 
 
 	# this function is called each time a new cluster in made, i.e. if 2 clusters, this is called two separate independent times
-	def calc_within_cluster_entropy(patIDs, attributes, summary, key, attribute_names, row_names):
+	def calc_within_cluster_entropy(patIDs, attributes, summary, key, attribute_names, row_names, variance_all_clusters):
 		entropy_of_each_attribute = []
 		# entropy of 0 means all patients share that attribute
 		num_samples_in_cluster = len(patIDs)
@@ -186,16 +188,12 @@ def cluster_summaries_binary_attributes(labeled_numLinks, labeled_patProfile, ou
 				entropy = -1*sumOfAtts
 				entropy_of_each_attribute.append(entropy)
 
-		# writes entropy for every attribute in each cluster to file
-		outFile.write('Entropy of each attribute for clusterID_'+str(key)+'\n')
-		outFile.write('\t'.join(attribute_names)+'\n')
-		outFile.write('\t'.join([str(entropy_of_each_attribute[x]) for x in range(0, len(entropy_of_each_attribute))])+'\n')
-
+		# basic statistcs for each cluster generated
+		variance_all_clusters.append(np.var(entropy_of_each_attribute))
+		weighted_entropy_all_clusters.append((float(num_samples_in_cluster)/len(row_names))*(sum(entropy_of_each_attribute)))
+		outFile.write('variance_within_cluster_'+str(key)+': '+str(np.var(entropy_of_each_attribute))+'\n')
 		outFile.write('Total_Entropy_of_cluster_'+str(key)+': '+str(sum(entropy_of_each_attribute))+'\n')
-		outFile.write('Weighted_Entropy_of_cluster_'+str(key)+': '+str((float(num_samples_in_cluster)/len(row_names))*(sum(entropy_of_each_attribute)))+'\n')
-
-
-
+		outFile.write('Weighted_Entropy_of_cluster_'+str(key)+': '+str((float(num_samples_in_cluster)/len(row_names))*(sum(entropy_of_each_attribute)))+'\n'+'\n')
 
 	# extract cluster names, and attribute names
 	clusters = labeled_numLinks.columns.values
@@ -220,11 +218,16 @@ def cluster_summaries_binary_attributes(labeled_numLinks, labeled_patProfile, ou
 		# counts total number of pats with each attribute per cluster
 		summary = list(np.sum(attributes.astype(int), axis=0))
 		
-		calc_within_cluster_entropy(patIDs, attributes, summary, key, attribute_names, row_names)
-		
-		summary.insert(0, 'total_atts_in_cluster_'+str(key))
-		str_summary = [str(summary[x]) for x in range(0, len(summary))]
-		outFile.write('\t'.join(str_summary)+'\n'+'\n')
+		# call this function
+		calc_within_cluster_entropy(patIDs, attributes, summary, key, attribute_names, row_names, variance_all_clusters)
+	
+	# basic statistics across all clusters	
+	outFile.write('variance_of_variance_between_all_clusters: '+str(np.var(variance_all_clusters))+'\n')
+	outFile.write('mean_variance_between_all_clusters: '+str(np.mean(variance_all_clusters))+'\n')
+	outFile.write('std_dev_of_varaince_between_all_clusters: '+str(np.std(variance_all_clusters))+'\n')
+	outFile.write('variance_of_weighted_entropy_between_all_clusters: '+str(np.var(weighted_entropy_all_clusters))+'\n')
+	outFile.write('mean_weighted_entropy_between_all_clusters: '+str(np.mean(weighted_entropy_all_clusters))+'\n')
+	outFile.write('std_dev_cluster_entropy_between_all_clusters: '+str(np.std(weighted_entropy_all_clusters))+'\n')
 
 		
 
